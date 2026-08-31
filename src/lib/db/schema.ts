@@ -1,6 +1,7 @@
 import {
   integer,
   index,
+  foreignKey,
   sqliteTable,
   text,
   uniqueIndex,
@@ -53,6 +54,7 @@ export const workspaces = sqliteTable(
   (table) => [
     index('workspaces_user_id_idx').on(table.userId),
     index('workspaces_title_idx').on(table.title),
+    uniqueIndex('workspaces_user_id_id_unique').on(table.userId, table.id),
   ],
 );
 
@@ -74,6 +76,11 @@ export const folders = sqliteTable(
   (table) => [
     index('folders_user_id_idx').on(table.userId),
     index('folders_workspace_id_idx').on(table.workspaceId),
+    foreignKey({
+      columns: [table.userId, table.workspaceId],
+      foreignColumns: [workspaces.userId, workspaces.id],
+      name: 'folders_user_id_workspace_id_workspaces_user_id_id_fk',
+    }),
   ],
 );
 
