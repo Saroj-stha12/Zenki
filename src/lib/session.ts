@@ -16,6 +16,58 @@ function secretKey() {
   return new TextEncoder().encode(env.JWT_SECRET);
 }
 
+function getRequestUrl(request?: Request) {
+  if (!request) return null;
+  try {
+    return new URL(request.url);
+  } catch {
+    return null;
+  }
+}
+
+function isHttpsRequest(request?: Request) {
+  const url = getRequestUrl(request);
+  if (!url) return false;
+
+  const forwardedProto = request?.headers.get('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase();
+  if (forwardedProto) {
+    return forwardedProto === 'https';
+  }
+
+  return url.protocol === 'https:';
+}
+
+function isCrossOriginRequest(request?: Request) {
+  const url = getRequestUrl(request);
+  if (!url) return false;
+
+  const origin = request?.headers.get('origin');
+  if (!origin) return false;
+
+  try {
+    return new URL(origin).origin !== url.origin;
+  } catch {
+    return false;
+  }
+}
+
+function getSessionCookieOptions(request: Request | undefined, expiresAt: Date) {
+  const secure = isHttpsRequest(request);
+  const crossOrigin = isCrossOriginRequest(request);
+  const sameSite: 'lax' | 'none' = secure && crossOrigin ? 'none' : 'lax';
+
+  return {
+    httpOnly: true,
+    // Cross-origin credentialed requests need SameSite=None, but that only
+    // works when the browser is also on HTTPS. For plain EC2 HTTP access,
+    // keep the cookie usable by staying on Lax.
+    sameSite,
+    secure,
+    path: '/',
+    expires: expiresAt,
+  };
+}
+
 export function newId() {
   return crypto.randomUUID();
 }
@@ -71,13 +123,7 @@ export async function createUserSession(user: User, request?: Request) {
   });
 
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: env.NODE_ENV === 'production',
-    path: '/',
-    expires: expiresAt,
-  });
+  cookieStore.set(SESSION_COOKIE, token, getSessionCookieOptions(request, expiresAt));
 
   return { token, sessionId, expiresAt };
 }
